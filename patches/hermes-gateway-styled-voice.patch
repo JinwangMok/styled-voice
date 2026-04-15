@@ -1,0 +1,131 @@
+diff --git a/gateway/run.py b/gateway/run.py
+index c8c25256..09b6d5bb 100644
+--- a/gateway/run.py
++++ b/gateway/run.py
+@@ -363,6 +363,20 @@ def _build_media_placeholder(event) -> str:
+     return "\n".join(parts)
+ 
+ 
++def _is_styled_voice_request(text: str) -> bool:
++    """Return True when the inbound text invokes the styled-voice skill."""
++    if not text:
++        return False
++    normalized = text.strip().lower()
++    return normalized.startswith("/styled-voice") or normalized.startswith("/styled_voice")
++
++
++def _build_audio_attachment_path_note(audio_paths: list[str]) -> str:
++    """Format cached audio attachment paths for model-visible context."""
++    lines = [f"[Audio attachment saved at: {path}]" for path in audio_paths if path]
++    return "\n".join(lines)
++
++
+ def _dequeue_pending_event(adapter, session_key: str) -> MessageEvent | None:
+     """Consume and return the full pending event for a session.
+ 
+@@ -2971,6 +2985,7 @@ class GatewayRunner:
+         if event.media_urls:
+             image_paths = []
+             audio_paths = []
++            styled_voice_request = _is_styled_voice_request(event.text or "")
+             for i, path in enumerate(event.media_urls):
+                 mtype = event.media_types[i] if i < len(event.media_types) else ""
+                 if mtype.startswith("image/") or event.message_type == MessageType.PHOTO:
+@@ -2985,6 +3000,10 @@ class GatewayRunner:
+                 )
+ 
+             if audio_paths:
++                if styled_voice_request:
++                    audio_note = _build_audio_attachment_path_note(audio_paths)
++                    if audio_note:
++                        message_text = f"{audio_note}\n\n{message_text}" if message_text else audio_note
+                 message_text = await self._enrich_message_with_transcription(
+                     message_text,
+                     audio_paths,
+diff --git a/tests/gateway/test_styled_voice_audio_paths.py b/tests/gateway/test_styled_voice_audio_paths.py
+new file mode 100644
+index 00000000..51bb87fd
+--- /dev/null
++++ b/tests/gateway/test_styled_voice_audio_paths.py
+@@ -0,0 +1,81 @@
++import pytest
++from types import SimpleNamespace
++
++from gateway.config import GatewayConfig, Platform, PlatformConfig
++from gateway.platforms.base import MessageEvent, MessageType, SessionSource
++from gateway.run import GatewayRunner, _build_audio_attachment_path_note, _is_styled_voice_request
++
++
++def _make_runner():
++    runner = object.__new__(GatewayRunner)
++    runner.config = GatewayConfig(platforms={Platform.DISCORD: PlatformConfig(enabled=True, token="tok")})
++    runner.adapters = {}
++    runner._has_setup_skill = lambda: False
++
++    async def _fake_vision(text, image_paths):
++        return text
++
++    async def _fake_stt(text, audio_paths):
++        return f"[transcribed {len(audio_paths)} audio file(s)]\n\n{text}" if text else f"[transcribed {len(audio_paths)} audio file(s)]"
++
++    runner._enrich_message_with_vision = _fake_vision
++    runner._enrich_message_with_transcription = _fake_stt
++    return runner
++
++
++def _make_source():
++    return SessionSource(
++        platform=Platform.DISCORD,
++        chat_id="123",
++        user_id="u1",
++        user_name="Jinwang Mok",
++        chat_type="group",
++        thread_id="thread1",
++    )
++
++
++@pytest.mark.asyncio
++async def test_prepare_inbound_message_text_includes_audio_paths_for_styled_voice():
++    runner = _make_runner()
++    event = MessageEvent(
++        text="/styled-voice 이 문장을 읽어줘",
++        message_type=MessageType.AUDIO,
++        source=_make_source(),
++        media_urls=["/tmp/ref1.wav", "/tmp/ref2.m4a"],
++        media_types=["audio/wav", "audio/mp4"],
++    )
++
++    result = await runner._prepare_inbound_message_text(event=event, source=event.source, history=[])
++
++    assert "[Audio attachment saved at: /tmp/ref1.wav]" in result
++    assert "[Audio attachment saved at: /tmp/ref2.m4a]" in result
++    assert "[transcribed 2 audio file(s)]" in result
++
++
++@pytest.mark.asyncio
++async def test_prepare_inbound_message_text_hides_audio_paths_for_normal_audio_messages():
++    runner = _make_runner()
++    event = MessageEvent(
++        text="please summarize this audio",
++        message_type=MessageType.AUDIO,
++        source=_make_source(),
++        media_urls=["/tmp/ref1.wav"],
++        media_types=["audio/wav"],
++    )
++
++    result = await runner._prepare_inbound_message_text(event=event, source=event.source, history=[])
++
++    assert "[Audio attachment saved at:" not in result
++    assert "[transcribed 1 audio file(s)]" in result
++
++
++def test_styled_voice_request_detection_accepts_hyphen_and_underscore():
++    assert _is_styled_voice_request("/styled-voice hi") is True
++    assert _is_styled_voice_request("/styled_voice hi") is True
++    assert _is_styled_voice_request(" /styled-voice hi") is True
++    assert _is_styled_voice_request("hello /styled-voice") is False
++
++
++def test_build_audio_attachment_path_note_formats_each_path():
++    note = _build_audio_attachment_path_note(["/tmp/a.wav", "/tmp/b.m4a"])
++    assert note == "[Audio attachment saved at: /tmp/a.wav]\n[Audio attachment saved at: /tmp/b.m4a]"
