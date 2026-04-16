@@ -21,10 +21,12 @@ Hermes is responsible only for:
 This repository is responsible for:
 
 - deciding how to treat the attached audio files
+- inspecting suspicious Discord cache media with `ffprobe`
 - normalizing odd Discord audio encodings
+- retrying automatically with normalized WAVs when direct upload fails or looks unsafe
 - calling the direct VoxCPM backend
 - converting the generated result to Discord-friendly OGG/Opus
-- documenting installation and verification
+- documenting installation, verification, and operations
 
 ## Why patch instead of fork
 
