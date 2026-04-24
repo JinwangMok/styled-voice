@@ -28,6 +28,11 @@ if git -C "$HERMES_DIR" apply --reverse --check "$PATCH_PATH" >/dev/null 2>&1; t
   exit 0
 fi
 
-git -C "$HERMES_DIR" apply --check "$PATCH_PATH"
-git -C "$HERMES_DIR" apply "$PATCH_PATH"
-echo "Applied styled-voice Hermes patch to $HERMES_DIR"
+if git -C "$HERMES_DIR" apply --3way --check "$PATCH_PATH" >/dev/null 2>&1; then
+  git -C "$HERMES_DIR" apply --3way "$PATCH_PATH"
+  echo "Applied styled-voice Hermes patch to $HERMES_DIR"
+  exit 0
+fi
+
+echo "Patch no longer applies cleanly. Refresh the styled-voice bundle instead of editing Hermes directly." >&2
+exit 1
