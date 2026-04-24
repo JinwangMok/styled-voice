@@ -2,12 +2,12 @@
 
 External Hermes skill for Discord voice cloning with VoxCPM, packaged **outside** the Hermes core repo.
 
-This repository is intentionally split into two layers:
+This repository is intentionally external-only:
 
 1. **External skill** — the repo root is a Hermes skill (`SKILL.md`).
-2. **Runtime patch bundle** — a tiny patch against Hermes runtime that exposes cached local audio attachment paths **only for `/styled-voice` requests**.
+2. **Helper/runtime tooling** — helper scripts live here, but the install flow no longer patches Hermes runtime.
 
-That means you can keep using the upstream Hermes codebase as-is, and apply a local patch from this repo instead of maintaining a long-lived fork.
+That means you can keep using the upstream Hermes codebase as-is without maintaining a long-lived fork or local runtime patch.
 
 ## What it does
 
@@ -26,16 +26,16 @@ styled-voice/
 ├── SKILL.md                                   # external Hermes skill (repo root)
 ├── README.md
 ├── patches/
-│   └── hermes-gateway-styled-voice.patch      # tiny runtime patch for Hermes
+│   └── hermes-gateway-styled-voice.patch      # archived historical patch snapshot (not applied by current install)
 ├── references/
 │   ├── architecture.md                        # design notes and rationale
 │   ├── operations.md                          # operational playbook / known issues
 │   └── v1.1-handoff.md                        # current handoff / follow-up context
 ├── scripts/
-│   ├── apply-hermes-patch.sh                  # idempotent patch apply helper
+│   ├── apply-hermes-patch.sh                  # archived helper from the old patch-based flow
 │   ├── install.sh                             # config + patch setup helper
 │   ├── styled_voice_request.py                # direct→normalize-retry helper
-│   └── verify.sh                              # repo + Hermes verification helper
+│   └── verify.sh                              # repo + skill-discovery verification helper
 └── tests/
     └── test_styled_voice_request.py           # helper-script regression tests
 ```
@@ -48,7 +48,7 @@ styled-voice/
 git clone https://github.com/JinwangMok/styled-voice.git ~/workspace/styled-voice
 ```
 
-### 2. Register it as an external Hermes skill and apply the runtime patch
+### 2. Register it as an external Hermes skill
 
 ```bash
 cd ~/workspace/styled-voice
@@ -58,8 +58,7 @@ cd ~/workspace/styled-voice
 What `install.sh` does:
 
 - adds this repo root to `skills.external_dirs` in your Hermes config
-- applies `patches/hermes-gateway-styled-voice.patch` to your local Hermes checkout
-- leaves upstream git remotes untouched
+- leaves the Hermes checkout untouched
 
 ### 3. Verify
 
@@ -67,18 +66,11 @@ What `install.sh` does:
 ./scripts/verify.sh --hermes-dir ~/.hermes/hermes-agent
 ```
 
-## Runtime patch scope
+## External-only contract
 
-The patch is deliberately tiny.
+The current install flow does **not** patch Hermes runtime.
 
-It adds:
-
-- `_is_styled_voice_request()`
-- `_build_audio_attachment_path_note()`
-- a conditional branch in `GatewayRunner._prepare_inbound_message_text(...)`
-- focused tests in `tests/gateway/test_styled_voice_audio_paths.py`
-
-It does **not** add a hardcoded feature-specific slash command or bake VoxCPM logic into Hermes core. Hermes just exposes cached audio file paths when `/styled-voice` is invoked; the external skill handles the rest.
+That means `/styled-voice` may only use audio file paths or URLs that Hermes already exposes in message context, or paths explicitly supplied by an operator. It must **not** rely on hidden local cache-path injection from patched gateway code.
 
 ## Discord-first usage
 

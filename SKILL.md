@@ -22,18 +22,11 @@ Generate new audio in the user's voice/style by sending cached local audio attac
 
 ## Runtime contract
 
-This external skill expects a tiny Hermes runtime patch to be installed. The patch is shipped with this repository in `patches/hermes-gateway-styled-voice.patch` and only does one thing:
+This external skill does **not** patch Hermes runtime.
 
-- for `/styled-voice` requests, expose cached local audio attachment paths to the model as text lines.
+Only use audio file paths or URLs that Hermes already exposes in the message context, or paths explicitly supplied by an operator. Do **not** assume hidden local cache paths are available, and do **not** guess undocumented Hermes internals.
 
-After the patch is applied, Hermes injects local cached audio paths into the user-visible message as lines like:
-
-- `[Audio attachment saved at: /abs/path/sample1.wav]`
-- `[Audio attachment saved at: /abs/path/sample2.m4a]`
-
-These are the exact files to upload with curl or with the helper script in this repository.
-
-The normal STT enrichment may also be present, but the **cached file paths are the source of truth** for building the multipart request.
+If the request does not contain reusable attachment paths or URLs, stop and explain that source-untouched mode cannot read hidden cached attachment files.
 
 ## Default behavior
 
@@ -115,9 +108,9 @@ If the user does **not** provide an exact transcript, do **not** guess one from 
 
 Before calling the backend:
 
-1. Extract all injected audio-path lines.
-2. Verify each file exists.
-3. If no attached audio files are available, tell the user to attach 1-3 sample audios and try again.
+1. Extract any explicit audio file paths or URLs from the request context.
+2. Verify each referenced local file exists before using it.
+3. If no reusable audio references are available, explain the source-untouched limitation and stop.
 4. If the synthesis text is empty, ask the user what sentence to generate.
 
 ## Preferred robust execution path
