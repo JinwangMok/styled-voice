@@ -43,6 +43,5 @@ config_path.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True)
 print(f'Updated {config_path} with skills.external_dirs += {repo_str}')
 PY
 
-"${ROOT_DIR}/scripts/apply-hermes-patch.sh" --hermes-dir "$HERMES_DIR"
-
 echo "styled-voice install complete"
+echo "No Hermes source patch was applied to $HERMES_DIR"
